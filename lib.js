@@ -36,7 +36,73 @@
     return `${site}${prefix}/${path.split("/").map(encodeURIComponent).join("/")}`;
   }
 
-  const api = { FILES_DIR, MAX_BYTES, sanitizeName, buildPath, detectRepo, publicUrl };
+  const PBKDF2_ITER = 600000;
+  const MIN_PASSWORD = 12;
+  const subtle = () => globalThis.crypto.subtle;
+  const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const BAD_LOGIN = "Usuario o contraseña incorrectos";
+
+  async function deriveKey(password, salt, iter) {
+    const base = await subtle().importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    return subtle().deriveKey(
+      { name: "PBKDF2", hash: "SHA-256", salt, iterations: iter },
+      base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+
+  async function sealToken(token, password, iter = PBKDF2_ITER) {
+    if (!token || !password) throw new Error("Token y contraseña son obligatorios");
+    const salt = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt, iter);
+    const ct = await subtle().encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(token));
+    return { salt: toB64(salt), iv: toB64(iv), ct: toB64(ct), iter };
+  }
+
+  async function openToken(entry, password) {
+    try {
+      const key = await deriveKey(password, fromB64(entry.salt), entry.iter || PBKDF2_ITER);
+      const pt = await subtle().decrypt({ name: "AES-GCM", iv: fromB64(entry.iv) }, key, fromB64(entry.ct));
+      return new TextDecoder().decode(pt);
+    } catch {
+      throw new Error(BAD_LOGIN);
+    }
+  }
+
+  function normalizeUser(name) {
+    const n = String(name || "").trim().toLowerCase();
+    if (!/^[a-z0-9._-]{2,32}$/.test(n)) throw new Error("Usuario inválido: 2-32 caracteres, sin espacios");
+    return n;
+  }
+
+  function validatePassword(p) {
+    if (typeof p !== "string" || p.length < MIN_PASSWORD) {
+      throw new Error(`La contraseña debe tener al menos ${MIN_PASSWORD} caracteres`);
+    }
+  }
+
+  function generatePassword(length = 16) {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+  }
+
+  function parseFileName(name) {
+    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-(.+)$/.exec(name);
+    if (!m) return { label: name, date: null };
+    return { label: m[7], date: new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6])) };
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  const api = {
+    FILES_DIR, MAX_BYTES, sanitizeName, buildPath, detectRepo, publicUrl,
+    sealToken, openToken, normalizeUser, validatePassword, generatePassword, parseFileName, formatBytes,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.QRLib = api;
 })(this);

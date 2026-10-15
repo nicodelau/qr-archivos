@@ -1,41 +1,74 @@
 (function () {
   const L = window.QRLib;
   const $ = (id) => document.getElementById(id);
-  const store = {
-    get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
-    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch { /* storage bloqueado */ } },
-  };
+  const REPO = L.detectRepo(location.hostname, location.pathname) || { owner: "nicodelau", repo: "qr-archivos" };
+  const USERS_PATH = "users.json";
+  const SESSION_KEY = "qr.session";
+  const PUBLISH_NOTE = "Si recién lo subiste, GitHub Pages tarda ~1 minuto en publicarlo. El QR ya es definitivo.";
 
-  const detected = L.detectRepo(location.hostname, location.pathname);
-  $("owner").value = store.get("qr.owner") || (detected && detected.owner) || "";
-  $("repo").value = store.get("qr.repo") || (detected && detected.repo) || "";
-  $("token").value = store.get("qr.token");
-  if (!$("token").value) $("cfg").open = true;
+  let session = null; // { user, token }
+  let files = [];
 
-  function cfg() {
-    const owner = $("owner").value.trim(), repo = $("repo").value.trim();
-    if (!owner || !repo) throw new Error("Completá usuario y repositorio en Configuración.");
-    return { owner, repo, token: $("token").value.trim() };
-  }
-
+  // ---------- utilidades ----------
   function setMsg(el, text, kind) {
     el.textContent = text;
     el.className = "msg" + (kind ? " " + kind : "");
   }
 
-  async function gh(path, opts) {
-    const { owner, repo, token } = cfg();
+  function show(view) {
+    for (const v of ["vLogin", "vSetup", "vDash"]) $(v).hidden = v !== view;
+  }
+
+  const storage = {
+    load() {
+      for (const s of [sessionStorage, localStorage]) {
+        try { const raw = s.getItem(SESSION_KEY); if (raw) return JSON.parse(raw); } catch { /* sin storage */ }
+      }
+      return null;
+    },
+    save(data, remember) {
+      try { (remember ? localStorage : sessionStorage).setItem(SESSION_KEY, JSON.stringify(data)); } catch { /* sin storage */ }
+    },
+    clear() {
+      for (const s of [sessionStorage, localStorage]) { try { s.removeItem(SESSION_KEY); } catch { /* sin storage */ } }
+    },
+  };
+
+  async function gh(path, token, opts = {}) {
     const headers = { Accept: "application/vnd.github+json" };
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (opts && opts.body) headers["Content-Type"] = "application/json";
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/${path}`, { ...opts, headers });
-    if (res.status === 404 && (!opts || opts.method !== "PUT")) return null;
+    if (opts.body) headers["Content-Type"] = "application/json";
+    const res = await fetch(`https://api.github.com/repos/${REPO.owner}/${REPO.repo}/${path}`, { ...opts, headers, cache: "no-store" });
+    if (res.status === 404 && !opts.method) return null;
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      const hint = res.status === 401 ? " (token inválido)" : res.status === 403 ? " (sin permiso o límite de la API)" : "";
-      throw new Error(`GitHub ${res.status}${hint}: ${body.message || res.statusText}`);
+      const hint = res.status === 401 ? " (token inválido o vencido)" : res.status === 403 ? " (sin permiso o límite de la API)" : "";
+      const err = new Error(`GitHub ${res.status}${hint}: ${body.message || res.statusText}`);
+      err.status = res.status;
+      throw err;
     }
-    return res.json();
+    return res.status === 204 ? null : res.json();
+  }
+
+  const encPath = (p) => p.split("/").map(encodeURIComponent).join("/");
+
+  function decodeB64Json(b64) {
+    const bytes = Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  function encodeB64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+
+  async function loadUsers(token) {
+    const file = await gh(`contents/${USERS_PATH}`, token);
+    if (!file) return { users: {}, sha: null };
+    const data = decodeB64Json(file.content);
+    return { users: (data && data.users) || {}, sha: file.sha };
   }
 
   function readBase64(file) {
@@ -52,99 +85,209 @@
     new QRCode(container, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
   }
 
-  function qrDataUrl(url) {
+  function downloadQR(url, name) {
     const tmp = document.createElement("div");
     renderQR(tmp, url, 1024);
-    return tmp.querySelector("canvas").toDataURL("image/png");
-  }
-
-  function downloadQR(url, name) {
     const a = document.createElement("a");
-    a.href = qrDataUrl(url);
+    a.href = tmp.querySelector("canvas").toDataURL("image/png");
     a.download = `qr-${name}.png`;
     a.click();
   }
 
-  let current = null;
-  function showResult(url, name) {
-    current = { url, name };
-    renderQR($("qr"), url, 220);
-    $("url").innerHTML = "";
-    const a = document.createElement("a");
-    a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = url;
-    $("url").appendChild(a);
-    $("result").hidden = false;
+  async function copy(text, noteEl) {
+    try { await navigator.clipboard.writeText(text); setMsg(noteEl, "Link copiado.", "ok"); }
+    catch { setMsg(noteEl, text); }
   }
+
+  // ---------- login ----------
+  $("loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = $("lMsg");
+    $("lBtn").disabled = true;
+    setMsg(msg, "Verificando…");
+    try {
+      const user = L.normalizeUser($("lUser").value);
+      const { users } = await loadUsers(null);
+      if (!users[user]) throw new Error("Usuario o contraseña incorrectos");
+      const token = await L.openToken(users[user], $("lPass").value);
+      session = { user, token };
+      storage.save(session, $("lRemember").checked);
+      $("lPass").value = "";
+      setMsg(msg, "");
+      enterDashboard();
+    } catch (err) {
+      setMsg(msg, err.message, "err");
+    } finally {
+      $("lBtn").disabled = false;
+    }
+  };
+
+  // ---------- setup ----------
+  function addUserRow(name = "") {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.innerHTML = `
+      <div><label>Usuario</label><input type="text" class="uName" autocapitalize="none" autocomplete="off"></div>
+      <div><label>Contraseña (mín. 12)</label><input type="text" class="uPass" autocomplete="off"></div>
+      <button type="button" class="ghost sm uGen">Generar</button>`;
+    row.querySelector(".uName").value = name;
+    row.querySelector(".uGen").onclick = () => { row.querySelector(".uPass").value = L.generatePassword(); };
+    $("sUsers").appendChild(row);
+  }
+
+  $("sAdd").onclick = () => addUserRow();
+
+  $("setupForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = $("sMsg");
+    $("sBtn").disabled = true;
+    try {
+      const token = $("sToken").value.trim();
+      if (!token) throw new Error("Falta el token.");
+      const rows = [...document.querySelectorAll(".user-row")]
+        .map((r) => ({ name: r.querySelector(".uName").value, pass: r.querySelector(".uPass").value }))
+        .filter((r) => r.name.trim() || r.pass);
+      if (!rows.length) throw new Error("Agregá al menos un usuario.");
+      const entries = rows.map((r) => { const n = L.normalizeUser(r.name); L.validatePassword(r.pass); return { n, pass: r.pass }; });
+
+      setMsg(msg, "Verificando el token…");
+      const current = await loadUsers(token);
+      setMsg(msg, "Cifrando…");
+      const users = { ...current.users };
+      for (const { n, pass } of entries) users[n] = await L.sealToken(token, pass);
+
+      setMsg(msg, "Guardando en el repo…");
+      await gh(`contents/${USERS_PATH}`, token, {
+        method: "PUT",
+        body: JSON.stringify({
+          message: `Usuarios: ${entries.map((x) => x.n).join(", ")}`,
+          content: encodeB64(JSON.stringify({ version: 1, users }, null, 2) + "\n"),
+          ...(current.sha ? { sha: current.sha } : {}),
+        }),
+      });
+      $("sToken").value = "";
+      setMsg(msg, `Listo: ${entries.map((x) => x.n).join(", ")}. Guardá las contraseñas antes de salir de esta pantalla.`, "ok");
+    } catch (err) {
+      setMsg(msg, err.message, "err");
+    } finally {
+      $("sBtn").disabled = false;
+    }
+  };
+
+  // ---------- dashboard ----------
+  function logout() {
+    session = null;
+    storage.clear();
+    files = [];
+    show("vLogin");
+  }
+  $("dLogout").onclick = logout;
+
+  function enterDashboard() {
+    $("dUser").textContent = session.user;
+    show("vDash");
+    loadFiles();
+  }
+
+  async function authed(fn) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err.status === 401) { logout(); setMsg($("lMsg"), "La sesión expiró: el token de GitHub ya no es válido.", "err"); }
+      throw err;
+    }
+  }
+
+  async function loadFiles() {
+    try {
+      const items = (await authed(() => gh(`contents/${L.FILES_DIR}`, session.token))) || [];
+      files = items
+        .filter((i) => i.type === "file" && !i.name.startsWith("."))
+        .map((i) => ({ ...i, ...L.parseFileName(i.name), url: L.publicUrl(REPO.owner, REPO.repo, i.path) }))
+        .sort((a, b) => b.name.localeCompare(a.name));
+      renderStats();
+      renderGrid();
+    } catch (err) {
+      setMsg($("upMsg"), err.message, "err");
+    }
+  }
+
+  function renderStats() {
+    $("stCount").textContent = files.length;
+    $("stSize").textContent = L.formatBytes(files.reduce((s, f) => s + f.size, 0));
+    const last = files.find((f) => f.date);
+    $("stLast").textContent = last ? last.date.toLocaleDateString("es-AR") : "–";
+  }
+
+  function renderGrid() {
+    const q = $("search").value.trim().toLowerCase();
+    const list = files.filter((f) => !q || f.label.toLowerCase().includes(q));
+    const grid = $("grid");
+    grid.innerHTML = "";
+    $("empty").hidden = list.length > 0;
+    $("empty").textContent = files.length ? "Ningún archivo coincide con la búsqueda." : "Todavía no hay archivos.";
+    for (const f of list) {
+      const card = document.createElement("div");
+      card.className = "card file";
+      const qr = document.createElement("div");
+      qr.className = "qrbox";
+      qr.title = "Ver QR";
+      qr.onclick = () => openModal(f);
+      renderQR(qr, f.url, 128);
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = f.label;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = [L.formatBytes(f.size), f.date && f.date.toLocaleString("es-AR")].filter(Boolean).join(" · ");
+      const actions = document.createElement("div");
+      actions.className = "row";
+      const open = document.createElement("a");
+      open.className = "btn ghost sm"; open.href = f.url; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Abrir";
+      const png = document.createElement("button");
+      png.className = "sm"; png.textContent = "QR PNG"; png.onclick = () => downloadQR(f.url, f.label);
+      const del = document.createElement("button");
+      del.className = "danger sm"; del.textContent = "Eliminar"; del.onclick = () => removeFile(f);
+      actions.append(open, png, del);
+      card.append(qr, name, meta, actions);
+      grid.appendChild(card);
+    }
+  }
+  $("search").oninput = renderGrid;
 
   async function upload(file) {
     const msg = $("upMsg");
-    $("result").hidden = true;
     try {
-      const { owner, repo, token } = cfg();
-      if (!token) throw new Error("Falta el token: abrilo en Configuración.");
       if (file.size > L.MAX_BYTES) throw new Error("El archivo supera 50 MB.");
       setMsg(msg, `Subiendo ${file.name}…`);
       const path = L.buildPath(file.name);
       const content = await readBase64(file);
-      await gh(`contents/${path.split("/").map(encodeURIComponent).join("/")}`, {
+      await authed(() => gh(`contents/${encPath(path)}`, session.token, {
         method: "PUT",
-        body: JSON.stringify({ message: `Subir ${file.name}`, content }),
-      });
-      const url = L.publicUrl(owner, repo, path);
-      setMsg(msg, "Listo. Archivo subido.", "ok");
-      showResult(url, path.split("/").pop());
-      loadList();
-    } catch (e) {
-      setMsg(msg, e.message, "err");
+        body: JSON.stringify({ message: `Subir ${file.name} (${session.user})`, content }),
+      }));
+      setMsg(msg, `Listo: ${file.name} subido.`, "ok");
+      await loadFiles();
+      const added = files.find((f) => f.path === path);
+      if (added) openModal(added, PUBLISH_NOTE);
+    } catch (err) {
+      setMsg(msg, err.message, "err");
     }
   }
 
-  async function loadList() {
-    const list = $("list");
+  async function removeFile(f) {
+    if (!confirm(`¿Eliminar "${f.label}"? El QR dejará de funcionar.`)) return;
     try {
-      const { owner, repo } = cfg();
-      const items = ((await gh(`contents/${L.FILES_DIR}`)) || [])
-        .filter((i) => i.type === "file" && !i.name.startsWith("."))
-        .sort((a, b) => b.name.localeCompare(a.name));
-      list.innerHTML = "";
-      if (!items.length) { list.innerHTML = "<li>Todavía no hay archivos.</li>"; return; }
-      for (const it of items) {
-        const url = L.publicUrl(owner, repo, it.path);
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = it.name;
-        const btns = document.createElement("span");
-        btns.className = "row"; btns.style.marginTop = "0";
-        const show = document.createElement("button");
-        show.className = "ghost"; show.textContent = "Ver QR";
-        show.onclick = () => { showResult(url, it.name); $("result").scrollIntoView({ behavior: "smooth" }); };
-        const dl = document.createElement("button");
-        dl.textContent = "PNG";
-        dl.onclick = () => downloadQR(url, it.name);
-        btns.append(show, dl);
-        li.append(a, btns);
-        list.appendChild(li);
-      }
-    } catch (e) {
-      list.innerHTML = "";
-      const li = document.createElement("li");
-      li.textContent = e.message;
-      list.appendChild(li);
+      await authed(() => gh(`contents/${encPath(f.path)}`, session.token, {
+        method: "DELETE",
+        body: JSON.stringify({ message: `Eliminar ${f.label} (${session.user})`, sha: f.sha }),
+      }));
+      setMsg($("upMsg"), `Eliminado: ${f.label}.`, "ok");
+      await loadFiles();
+    } catch (err) {
+      setMsg($("upMsg"), err.message, "err");
     }
   }
-
-  $("save").onclick = () => {
-    store.set("qr.owner", $("owner").value.trim());
-    store.set("qr.repo", $("repo").value.trim());
-    store.set("qr.token", $("token").value.trim());
-    setMsg($("cfgMsg"), "Guardado en este navegador.", "ok");
-    loadList();
-  };
-  $("forget").onclick = () => {
-    $("token").value = "";
-    store.set("qr.token", "");
-    setMsg($("cfgMsg"), "Token eliminado de este navegador.", "ok");
-  };
 
   const drop = $("drop"), input = $("file");
   drop.onclick = () => input.click();
@@ -156,12 +299,47 @@
     if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
   };
 
-  $("dl").onclick = () => current && downloadQR(current.url, current.name);
-  $("copy").onclick = async () => {
-    if (!current) return;
-    try { await navigator.clipboard.writeText(current.url); setMsg($("note"), "Link copiado.", "ok"); }
-    catch { setMsg($("note"), current.url); }
-  };
+  // ---------- modal ----------
+  let modalFile = null;
+  function openModal(f, note) {
+    modalFile = f;
+    $("mName").textContent = f.label;
+    renderQR($("mQr"), f.url, 240);
+    $("mUrl").innerHTML = "";
+    const a = document.createElement("a");
+    a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = f.url;
+    $("mUrl").appendChild(a);
+    setMsg($("mNote"), note || "");
+    $("modal").hidden = false;
+  }
+  $("mClose").onclick = () => { $("modal").hidden = true; };
+  $("modal").onclick = (e) => { if (e.target === $("modal")) $("modal").hidden = true; };
+  $("mDl").onclick = () => modalFile && downloadQR(modalFile.url, modalFile.label);
+  $("mCopy").onclick = () => modalFile && copy(modalFile.url, $("mNote"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").hidden = true; });
 
-  loadList();
+  // ---------- arranque ----------
+  async function start() {
+    if (location.hash === "#setup") {
+      addUserRow(); addUserRow();
+      show("vSetup");
+      return;
+    }
+    session = storage.load();
+    if (session && session.token) { enterDashboard(); return; }
+    show("vLogin");
+    try {
+      const { users } = await loadUsers(null);
+      if (!Object.keys(users).length) {
+        setMsg($("lMsg"), "Todavía no hay usuarios. Configuralos en #setup.", "err");
+        const a = document.createElement("a");
+        a.href = "#setup"; a.textContent = " Ir a configurar";
+        $("lMsg").appendChild(a);
+      }
+    } catch (err) {
+      setMsg($("lMsg"), err.message, "err");
+    }
+  }
+  window.addEventListener("hashchange", () => location.reload());
+  start();
 })();

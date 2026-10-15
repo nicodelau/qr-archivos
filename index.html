@@ -5,76 +5,137 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QR Archivos</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --accent:#2563eb; --ok:#15803d; --err:#b42318; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --card:#171b23; --fg:#e7e9ee; --muted:#9aa3b2; --line:#2a303b; --accent:#5b8cff; --ok:#4ade80; --err:#f87171; } }
+  :root { --bg:#f4f6f9; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --accent:#2563eb; --accent-soft:#e8efff; --ok:#15803d; --err:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --card:#171b23; --fg:#e7e9ee; --muted:#9aa3b2; --line:#2a303b; --accent:#5b8cff; --accent-soft:#1c2740; --ok:#4ade80; --err:#f87171; } }
   * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
   body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
-  main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
-  h1 { font-size:1.5rem; margin:0 0 4px; } h2 { font-size:1.05rem; margin:0 0 12px; }
-  p.sub { color:var(--muted); margin:0 0 24px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
-  label { display:block; font-size:.85rem; color:var(--muted); margin:8px 0 4px; }
-  input[type=text], input[type=password] { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
-  button, .btn { display:inline-block; padding:9px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; text-decoration:none; }
-  button.ghost, .btn.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+  h1 { font-size:1.3rem; margin:0; } h2 { font-size:1.05rem; margin:0 0 12px; }
+  .muted { color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  label { display:block; font-size:.85rem; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=password], input[type=search] { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  button, .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; text-decoration:none; }
+  .ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+  .danger { background:transparent; color:var(--err); border:1px solid var(--line); }
+  .sm { padding:5px 10px; font-size:.85rem; }
   button:disabled { opacity:.5; cursor:default; }
+  .msg { margin:10px 0 0; font-size:.9rem; min-height:1.2em; } .msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
+  .msg a { color:var(--accent); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+  /* Login / setup */
+  .center { min-height:100vh; display:grid; place-items:center; padding:24px 16px; }
+  .auth { width:100%; max-width:380px; }
+  .auth h1 { margin-bottom:4px; }
+  .auth button[type=submit] { width:100%; margin-top:16px; }
+  .setup { width:100%; max-width:560px; }
+  .user-row { display:grid; grid-template-columns:1fr 1.4fr auto; gap:8px; align-items:end; }
+  @media (max-width:520px) { .user-row { grid-template-columns:1fr; } }
+
+  /* Dashboard */
+  header.top { background:var(--card); border-bottom:1px solid var(--line); }
+  header.top .in { max-width:1100px; margin:0 auto; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  main.dash { max-width:1100px; margin:0 auto; padding:20px 16px 64px; display:grid; gap:16px; }
+  .stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .stat .v { font-size:1.5rem; font-weight:600; } .stat .k { font-size:.8rem; color:var(--muted); }
+  @media (max-width:560px) { .stats { grid-template-columns:1fr 1fr; } .stats .stat:last-child { grid-column:span 2; } }
   .drop { border:2px dashed var(--line); border-radius:10px; padding:28px 12px; text-align:center; color:var(--muted); cursor:pointer; }
-  .drop.over { border-color:var(--accent); color:var(--accent); }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
-  .msg { margin-top:10px; font-size:.9rem; } .msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
-  .qr { background:#fff; padding:12px; border-radius:8px; display:inline-block; }
-  .result { text-align:center; margin-top:14px; }
-  .url { word-break:break-all; font-size:.85rem; color:var(--muted); }
-  ul.files { list-style:none; margin:0; padding:0; }
-  ul.files li { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); }
-  ul.files li:first-child { border-top:0; }
-  ul.files a { color:var(--fg); word-break:break-all; }
-  details summary { cursor:pointer; color:var(--muted); }
+  .drop.over { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+  .file { display:flex; flex-direction:column; gap:8px; }
+  .file .qrbox { background:#fff; border-radius:8px; padding:10px; display:grid; place-items:center; cursor:pointer; }
+  .file .qrbox img, .file .qrbox canvas { width:128px !important; height:128px !important; }
+  .file .name { font-weight:600; word-break:break-all; }
+  .file .meta { font-size:.8rem; color:var(--muted); }
+  .bar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .bar h2 { margin:0; } .bar input { max-width:260px; }
+
+  /* Modal QR */
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:grid; place-items:center; padding:16px; z-index:10; }
+  .modal .card { max-width:360px; width:100%; text-align:center; }
+  .modal .qr { background:#fff; padding:12px; border-radius:8px; display:inline-block; }
+  .modal .url { word-break:break-all; font-size:.85rem; }
+  .modal .url a { color:var(--accent); }
 </style>
 </head>
 <body>
-<main>
-  <h1>QR Archivos</h1>
-  <p class="sub">Subí un archivo y obtené un QR permanente para compartirlo.</p>
 
-  <section>
-    <details id="cfg">
-      <summary>Configuración (token de GitHub para subir)</summary>
-      <label for="owner">Usuario / organización</label>
-      <input type="text" id="owner" autocomplete="off">
-      <label for="repo">Repositorio</label>
-      <input type="text" id="repo" autocomplete="off">
-      <label for="token">Token (fine-grained, permiso "Contents: Read and write" sólo en este repo)</label>
-      <input type="password" id="token" autocomplete="off">
-      <div class="row">
-        <button id="save">Guardar</button>
-        <button class="ghost" id="forget">Olvidar token</button>
-      </div>
-      <p class="msg" id="cfgMsg">El token se guarda sólo en este navegador.</p>
-    </details>
-  </section>
+<!-- Login -->
+<div class="center" id="vLogin" hidden>
+  <form class="card auth" id="loginForm">
+    <h1>QR Archivos</h1>
+    <p class="muted" style="margin:0">Ingresá para gestionar tus archivos.</p>
+    <label for="lUser">Usuario</label>
+    <input type="text" id="lUser" autocomplete="username" autocapitalize="none" required>
+    <label for="lPass">Contraseña</label>
+    <input type="password" id="lPass" autocomplete="current-password" required>
+    <label class="row" style="color:var(--fg)"><input type="checkbox" id="lRemember" checked> Mantener la sesión en este dispositivo</label>
+    <button type="submit" id="lBtn">Ingresar</button>
+    <p class="msg" id="lMsg"></p>
+  </form>
+</div>
 
-  <section>
-    <h2>Subir archivo</h2>
-    <div class="drop" id="drop">Arrastrá un archivo acá o tocá para elegir (máx. 50 MB)</div>
-    <input type="file" id="file" hidden>
-    <p class="msg" id="upMsg"></p>
-    <div class="result" id="result" hidden>
-      <div class="qr" id="qr"></div>
-      <p class="url" id="url"></p>
-      <div class="row" style="justify-content:center">
-        <button id="dl">Descargar QR</button>
-        <button class="ghost" id="copy">Copiar link</button>
-      </div>
-      <p class="msg" id="note">GitHub Pages tarda ~1 minuto en publicar el archivo nuevo. El QR ya es definitivo.</p>
+<!-- Setup -->
+<div class="center" id="vSetup" hidden>
+  <form class="card setup" id="setupForm">
+    <h1>Configurar usuarios</h1>
+    <p class="muted">Se hace una sola vez. El token de GitHub se guarda en el repo <b>cifrado con la contraseña de cada usuario</b>; después sólo se ingresa con usuario y contraseña.</p>
+    <label for="sToken">Token de GitHub (fine-grained, "Contents: Read and write" sólo en este repo)</label>
+    <input type="password" id="sToken" autocomplete="off" required>
+    <div id="sUsers"></div>
+    <div class="row" style="margin-top:16px">
+      <button type="button" class="ghost" id="sAdd">+ Agregar usuario</button>
+      <button type="submit" id="sBtn">Guardar usuarios</button>
+      <a class="btn ghost" href="./">Ir al login</a>
     </div>
-  </section>
+    <p class="msg" id="sMsg"></p>
+  </form>
+</div>
 
-  <section>
-    <h2>Archivos subidos</h2>
-    <ul class="files" id="list"><li>Cargando…</li></ul>
-  </section>
-</main>
+<!-- Dashboard -->
+<div id="vDash" hidden>
+  <header class="top"><div class="in">
+    <h1>QR Archivos</h1>
+    <div class="row"><span class="muted" id="dUser"></span><button class="ghost sm" id="dLogout">Salir</button></div>
+  </div></header>
+  <main class="dash">
+    <div class="stats">
+      <div class="card stat"><div class="v" id="stCount">–</div><div class="k">Archivos</div></div>
+      <div class="card stat"><div class="v" id="stSize">–</div><div class="k">Espacio usado</div></div>
+      <div class="card stat"><div class="v" id="stLast">–</div><div class="k">Última subida</div></div>
+    </div>
+    <section class="card">
+      <h2>Subir archivo</h2>
+      <div class="drop" id="drop">Arrastrá un archivo acá o tocá para elegir (máx. 50 MB)</div>
+      <input type="file" id="file" hidden>
+      <p class="msg" id="upMsg"></p>
+    </section>
+    <section class="card">
+      <div class="bar">
+        <h2>Archivos</h2>
+        <input type="search" id="search" placeholder="Buscar…">
+      </div>
+      <div class="grid" id="grid"></div>
+      <p class="muted" id="empty" hidden>Todavía no hay archivos.</p>
+    </section>
+  </main>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="card">
+    <h2 id="mName"></h2>
+    <div class="qr" id="mQr"></div>
+    <p class="url" id="mUrl"></p>
+    <div class="row" style="justify-content:center">
+      <button id="mDl">Descargar QR</button>
+      <button class="ghost" id="mCopy">Copiar link</button>
+      <button class="ghost" id="mClose">Cerrar</button>
+    </div>
+    <p class="msg muted" id="mNote"></p>
+  </div>
+</div>
+
 <script src="vendor/qrcode.min.js"></script>
 <script src="lib.js"></script>
 <script src="app.js"></script>

@@ -90,14 +90,6 @@ test("pdfNameFor y baseName", () => {
   assert.strictEqual(L.baseName("sin-ext"), "sin-ext");
 });
 
-test("whatsappShareUrl arma el link con nombre y URL codificados", () => {
-  assert.strictEqual(
-    L.whatsappShareUrl("menú.pdf", "https://x.github.io/r/files/a.pdf"),
-    "https://wa.me/?text=men%C3%BA.pdf%0Ahttps%3A%2F%2Fx.github.io%2Fr%2Ffiles%2Fa.pdf");
-  assert.strictEqual(L.whatsappShareUrl("", "https://a.b/c"), "https://wa.me/?text=https%3A%2F%2Fa.b%2Fc");
-  assert.throws(() => L.whatsappShareUrl("x", ""));
-});
-
 test("publicUrl arma la URL de Pages", () => {
   assert.strictEqual(L.publicUrl("NicoDelau", "qr-archivos", "files/a b.pdf"), "https://nicodelau.github.io/qr-archivos/files/a%20b.pdf");
   assert.strictEqual(L.publicUrl("x", "x.github.io", "files/a.pdf"), "https://x.github.io/files/a.pdf");

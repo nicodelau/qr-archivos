@@ -87,6 +87,7 @@
   }
 
   const QR_SIZE = 1024, QR_MARGIN = 80, QR_CAPTION = 140;
+  const WHATSAPP_URL = "https://web.whatsapp.com/";
 
   // QR con margen blanco (mejora el escaneo) y el nombre del archivo debajo.
   function qrPngDataUrl(url, caption) {
@@ -131,15 +132,14 @@
   // Sin awaits antes de navigator.share: Safari exige que se llame dentro del gesto del usuario.
   function shareQR(f, noteEl) {
     const file = dataUrlToFile(qrPngDataUrl(f.url, captionFor(f)), qrFileName(f));
-    const text = `${captionFor(f)}\n${f.url}`;
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], text }).catch((err) => {
+      navigator.share({ files: [file] }).catch((err) => {
         if (err.name !== "AbortError" && noteEl) setMsg(noteEl, `No se pudo compartir: ${err.message}`, "err");
       });
       return;
     }
     downloadQR(f);
-    window.open(L.whatsappShareUrl(captionFor(f), f.url), "_blank", "noopener");
+    window.open(WHATSAPP_URL, "_blank", "noopener");
     if (noteEl) setMsg(noteEl, "Se descargó el PNG del QR: adjuntalo en el chat de WhatsApp que se abrió.", "ok");
   }
 

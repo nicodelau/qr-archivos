@@ -126,14 +126,7 @@
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function whatsappShareUrl(label, url) {
-    if (!url) throw new Error("Falta la URL a compartir");
-    const text = label ? `${label}\n${url}` : url;
-    return `https://wa.me/?text=${encodeURIComponent(text)}`;
-  }
-
   const api = {
-    whatsappShareUrl,
     FILES_DIR, ORIGINALS_DIR, MAX_BYTES, sanitizeName, buildPath, detectRepo, publicUrl,
     baseName, isConvertible, pdfNameFor, planUpload,
     sealToken, openToken, normalizeUser, validatePassword, generatePassword, parseFileName, formatBytes,

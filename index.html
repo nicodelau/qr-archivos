@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QR Archivos</title>
+<title>QRchivo</title>
+<meta name="description" content="Tus archivos, un QR para siempre.">
+<meta name="theme-color" content="#1d4ed8">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root { --bg:#f4f6f9; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --accent:#2563eb; --accent-soft:#e8efff; --ok:#15803d; --err:#b42318; }
   @media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --card:#171b23; --fg:#e7e9ee; --muted:#9aa3b2; --line:#2a303b; --accent:#5b8cff; --accent-soft:#1c2740; --ok:#4ade80; --err:#f87171; } }
@@ -29,6 +34,11 @@
   .center { min-height:100vh; display:grid; place-items:center; padding:24px 16px; }
   .auth { width:100%; max-width:380px; }
   .auth h1 { margin-bottom:4px; }
+  .auth .logo { width:56px; height:56px; display:block; margin:0 auto 12px; }
+  .auth .brand { text-align:center; }
+  .brandbar { display:flex; align-items:center; gap:10px; }
+  .brandbar img { width:32px; height:32px; }
+  .tag { font-size:.8rem; color:var(--muted); }
   .auth button[type=submit] { width:100%; margin-top:16px; }
   .setup { width:100%; max-width:560px; }
   .user-row { display:grid; grid-template-columns:1fr 1.4fr auto; gap:8px; align-items:end; }
@@ -65,8 +75,11 @@
 <!-- Login -->
 <div class="center" id="vLogin" hidden>
   <form class="card auth" id="loginForm">
-    <h1>QR Archivos</h1>
-    <p class="muted" style="margin:0">Ingresá para gestionar tus archivos.</p>
+    <div class="brand">
+      <img class="logo" src="logo.svg" alt="">
+      <h1>QRchivo</h1>
+      <p class="muted" style="margin:0">Tus archivos, un QR para siempre.</p>
+    </div>
     <label for="lUser">Usuario</label>
     <input type="text" id="lUser" autocomplete="username" autocapitalize="none" required>
     <label for="lPass">Contraseña</label>
@@ -97,7 +110,10 @@
 <!-- Dashboard -->
 <div id="vDash" hidden>
   <header class="top"><div class="in">
-    <h1>QR Archivos</h1>
+    <div class="brandbar">
+      <img src="logo.svg" alt="">
+      <div><h1>QRchivo</h1><div class="tag">Tus archivos, un QR para siempre</div></div>
+    </div>
     <div class="row"><span class="muted" id="dUser"></span><button class="ghost sm" id="dLogout">Salir</button></div>
   </div></header>
   <main class="dash">

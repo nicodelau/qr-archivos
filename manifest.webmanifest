@@ -1,0 +1,15 @@
+{
+  "name": "QRchivo",
+  "short_name": "QRchivo",
+  "description": "Tus archivos, un QR para siempre.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1218",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    { "src": "logo.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

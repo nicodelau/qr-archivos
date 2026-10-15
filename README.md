@@ -1,4 +1,4 @@
-# QR Archivos
+# QRchivo
 
 Dashboard estático (GitHub Pages) para subir archivos y generar QRs permanentes.
 

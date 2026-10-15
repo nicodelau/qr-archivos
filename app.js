@@ -5,6 +5,7 @@
   const USERS_PATH = "users.json";
   const SESSION_KEY = "qr.session";
   const PUBLISH_NOTE = "Si recién lo subiste, GitHub Pages tarda ~1 minuto en publicarlo. El QR ya es definitivo.";
+  const CONVERT_NOTE = "Se está convirtiendo a PDF (~3 minutos). El QR ya es definitivo y abrirá el PDF cuando esté listo.";
 
   let session = null; // { user, token }
   let files = [];
@@ -198,15 +199,40 @@
     }
   }
 
+  const CONVERSION_TIMEOUT_MS = 15 * 60 * 1000;
+  const REFRESH_MS = 30 * 1000;
+  let refreshTimer = null;
+
+  async function listDir(dir) {
+    const items = (await authed(() => gh(`contents/${dir}`, session.token))) || [];
+    return items.filter((i) => i.type === "file" && !i.name.startsWith("."));
+  }
+
   async function loadFiles() {
+    clearTimeout(refreshTimer);
     try {
-      const items = (await authed(() => gh(`contents/${L.FILES_DIR}`, session.token))) || [];
-      files = items
-        .filter((i) => i.type === "file" && !i.name.startsWith("."))
-        .map((i) => ({ ...i, ...L.parseFileName(i.name), url: L.publicUrl(REPO.owner, REPO.repo, i.path) }))
-        .sort((a, b) => b.name.localeCompare(a.name));
+      const [served, originals] = await Promise.all([listDir(L.FILES_DIR), listDir(L.ORIGINALS_DIR)]);
+      const servedNames = new Set(served.map((i) => i.name));
+      const originalByPdf = new Map(originals.map((o) => [L.pdfNameFor(o.name), o]));
+      const ready = served.map((i) => ({
+        ...i, ...L.parseFileName(i.name), original: originalByPdf.get(i.name) || null,
+        url: L.publicUrl(REPO.owner, REPO.repo, i.path),
+      }));
+      const pending = originals
+        .filter((o) => !servedNames.has(L.pdfNameFor(o.name)))
+        .map((o) => {
+          const pdf = L.pdfNameFor(o.name);
+          const info = L.parseFileName(o.name);
+          const failed = !!info.date && Date.now() - info.date.getTime() > CONVERSION_TIMEOUT_MS;
+          return {
+            ...o, ...info, name: pdf, pending: !failed, failed,
+            url: L.publicUrl(REPO.owner, REPO.repo, `${L.FILES_DIR}/${pdf}`),
+          };
+        });
+      files = [...ready, ...pending].sort((a, b) => b.name.localeCompare(a.name));
       renderStats();
       renderGrid();
+      if (files.some((f) => f.pending)) refreshTimer = setTimeout(loadFiles, REFRESH_MS);
     } catch (err) {
       setMsg($("upMsg"), err.message, "err");
     }
@@ -239,11 +265,15 @@
       name.textContent = f.label;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = [L.formatBytes(f.size), f.date && f.date.toLocaleString("es-AR")].filter(Boolean).join(" · ");
+      const status = f.pending ? "Convirtiendo a PDF…" : f.failed ? "No se pudo convertir" : L.formatBytes(f.size);
+      meta.textContent = [status, f.date && f.date.toLocaleString("es-AR")].filter(Boolean).join(" · ");
+      if (f.failed) meta.style.color = "var(--err)";
       const actions = document.createElement("div");
       actions.className = "row";
-      const open = document.createElement("a");
-      open.className = "btn ghost sm"; open.href = f.url; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Abrir";
+      const open = document.createElement(f.pending || f.failed ? "span" : "a");
+      open.className = "btn ghost sm"; open.textContent = "Abrir";
+      if (f.pending || f.failed) open.style.opacity = ".5";
+      else { open.href = f.url; open.target = "_blank"; open.rel = "noopener"; }
       const png = document.createElement("button");
       png.className = "sm"; png.textContent = "QR PNG"; png.onclick = () => downloadQR(f.url, f.label);
       const del = document.createElement("button");
@@ -260,16 +290,17 @@
     try {
       if (file.size > L.MAX_BYTES) throw new Error("El archivo supera 50 MB.");
       setMsg(msg, `Subiendo ${file.name}…`);
-      const path = L.buildPath(file.name);
+      const plan = L.planUpload(file.name);
       const content = await readBase64(file);
-      await authed(() => gh(`contents/${encPath(path)}`, session.token, {
+      await authed(() => gh(`contents/${encPath(plan.uploadPath)}`, session.token, {
         method: "PUT",
         body: JSON.stringify({ message: `Subir ${file.name} (${session.user})`, content }),
       }));
-      setMsg(msg, `Listo: ${file.name} subido.`, "ok");
+      setMsg(msg, plan.converts ? `Listo: ${file.name} subido. Se está convirtiendo a PDF.` : `Listo: ${file.name} subido.`, "ok");
       await loadFiles();
-      const added = files.find((f) => f.path === path);
-      if (added) openModal(added, PUBLISH_NOTE);
+      const servedName = plan.servedPath.split("/").pop();
+      const added = files.find((f) => f.name === servedName);
+      if (added) openModal(added, plan.converts ? CONVERT_NOTE : PUBLISH_NOTE);
     } catch (err) {
       setMsg(msg, err.message, "err");
     }
@@ -277,11 +308,13 @@
 
   async function removeFile(f) {
     if (!confirm(`¿Eliminar "${f.label}"? El QR dejará de funcionar.`)) return;
+    const del = (item) => authed(() => gh(`contents/${encPath(item.path)}`, session.token, {
+      method: "DELETE",
+      body: JSON.stringify({ message: `Eliminar ${item.name} (${session.user})`, sha: item.sha }),
+    }));
     try {
-      await authed(() => gh(`contents/${encPath(f.path)}`, session.token, {
-        method: "DELETE",
-        body: JSON.stringify({ message: `Eliminar ${f.label} (${session.user})`, sha: f.sha }),
-      }));
+      await del(f);
+      if (f.original) await del(f.original);
       setMsg($("upMsg"), `Eliminado: ${f.label}.`, "ok");
       await loadFiles();
     } catch (err) {

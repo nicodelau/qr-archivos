@@ -1,0 +1,72 @@
+name: Convertir a PDF
+
+on:
+  push:
+    branches: [main]
+    paths: ["originals/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: convert-pdf
+  cancel-in-progress: false
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Buscar documentos sin PDF
+        id: pending
+        shell: bash
+        run: |
+          shopt -s nullglob nocaseglob
+          : > "$RUNNER_TEMP/pending.txt"
+          for f in originals/*.{doc,docx,odt,rtf,txt,xls,xlsx,ods,csv,ppt,pptx,odp}; do
+            base="$(basename "${f%.*}")"
+            [ -f "files/$base.pdf" ] || echo "$f" >> "$RUNNER_TEMP/pending.txt"
+          done
+          echo "count=$(wc -l < "$RUNNER_TEMP/pending.txt")" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/pending.txt"
+
+      - name: Instalar LibreOffice
+        if: steps.pending.outputs.count != '0'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libreoffice-writer libreoffice-calc libreoffice-impress \
+            fonts-liberation fonts-dejavu fonts-crosextra-carlito fonts-crosextra-caladea
+
+      - name: Convertir
+        if: steps.pending.outputs.count != '0'
+        shell: bash
+        run: |
+          mapfile -t docs < "$RUNNER_TEMP/pending.txt"
+          for f in "${docs[@]}"; do
+            soffice --headless --convert-to pdf --outdir files "$f" < /dev/null \
+              || echo "::error::No se pudo convertir $f"
+          done
+
+      - name: Publicar PDFs
+        if: steps.pending.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add files/*.pdf
+          if git diff --cached --quiet; then echo "Nada para publicar"; exit 0; fi
+          git commit -m "Convertir a PDF"
+          pushed=false
+          for i in 1 2 3; do
+            if git pull --rebase -q origin main && git push -q origin HEAD:main; then pushed=true; break; fi
+            sleep 5
+          done
+          [ "$pushed" = true ] || { echo "::error::No se pudo publicar los PDFs"; exit 1; }
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" > /dev/null || true

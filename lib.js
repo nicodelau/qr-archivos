@@ -17,10 +17,37 @@
     return e ? `${b}.${e}` : b;
   }
 
-  function buildPath(name, now) {
+  function buildPath(name, now, dir = FILES_DIR) {
     const d = now instanceof Date ? now : new Date();
     const stamp = d.toISOString().slice(0, 19).replace(/[-:T]/g, "");
-    return `${FILES_DIR}/${stamp}-${sanitizeName(name)}`;
+    return `${dir}/${stamp}-${sanitizeName(name)}`;
+  }
+
+  const ORIGINALS_DIR = "originals";
+  const CONVERTIBLE = ["doc", "docx", "odt", "rtf", "txt", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp"];
+
+  function baseName(name) {
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(0, dot) : name;
+  }
+
+  function isConvertible(name) {
+    const dot = name.lastIndexOf(".");
+    return dot > 0 && CONVERTIBLE.includes(name.slice(dot + 1).toLowerCase());
+  }
+
+  function pdfNameFor(name) {
+    return `${baseName(name)}.pdf`;
+  }
+
+  function planUpload(name, now) {
+    if (!isConvertible(name)) {
+      const path = buildPath(name, now);
+      return { uploadPath: path, servedPath: path, converts: false };
+    }
+    const uploadPath = buildPath(name, now, ORIGINALS_DIR);
+    const file = uploadPath.slice(ORIGINALS_DIR.length + 1);
+    return { uploadPath, servedPath: `${FILES_DIR}/${pdfNameFor(file)}`, converts: true };
   }
 
   function detectRepo(hostname, pathname) {
@@ -100,7 +127,8 @@
   }
 
   const api = {
-    FILES_DIR, MAX_BYTES, sanitizeName, buildPath, detectRepo, publicUrl,
+    FILES_DIR, ORIGINALS_DIR, MAX_BYTES, sanitizeName, buildPath, detectRepo, publicUrl,
+    baseName, isConvertible, pdfNameFor, planUpload,
     sealToken, openToken, normalizeUser, validatePassword, generatePassword, parseFileName, formatBytes,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

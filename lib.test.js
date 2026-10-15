@@ -65,6 +65,31 @@ test("formatBytes", () => {
   assert.strictEqual(L.formatBytes(5 * 1024 * 1024), "5.0 MB");
 });
 
+test("isConvertible reconoce documentos de oficina", () => {
+  for (const n of ["a.docx", "b.DOC", "c.xlsx", "d.pptx", "e.odt", "f.txt", "g.csv", "h.rtf"]) assert.ok(L.isConvertible(n), n);
+  for (const n of ["a.pdf", "b.jpg", "c.png", "sin-ext", "x.zip"]) assert.ok(!L.isConvertible(n), n);
+});
+
+test("planUpload: documentos van a originals y el QR apunta al PDF", () => {
+  const now = new Date("2026-10-15T12:34:56Z");
+  assert.deepStrictEqual(L.planUpload("Informe Final.DOCX", now), {
+    uploadPath: "originals/20261015123456-informe-final.docx",
+    servedPath: "files/20261015123456-informe-final.pdf",
+    converts: true,
+  });
+  assert.deepStrictEqual(L.planUpload("foto.jpg", now), {
+    uploadPath: "files/20261015123456-foto.jpg",
+    servedPath: "files/20261015123456-foto.jpg",
+    converts: false,
+  });
+});
+
+test("pdfNameFor y baseName", () => {
+  assert.strictEqual(L.pdfNameFor("20261015123456-a.docx"), "20261015123456-a.pdf");
+  assert.strictEqual(L.baseName("20261015123456-a.b.pdf"), "20261015123456-a.b");
+  assert.strictEqual(L.baseName("sin-ext"), "sin-ext");
+});
+
 test("publicUrl arma la URL de Pages", () => {
   assert.strictEqual(L.publicUrl("NicoDelau", "qr-archivos", "files/a b.pdf"), "https://nicodelau.github.io/qr-archivos/files/a%20b.pdf");
   assert.strictEqual(L.publicUrl("x", "x.github.io", "files/a.pdf"), "https://x.github.io/files/a.pdf");

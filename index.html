@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Archivos</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#667085; --line:#e3e6eb; --accent:#2563eb; --ok:#15803d; --err:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --card:#171b23; --fg:#e7e9ee; --muted:#9aa3b2; --line:#2a303b; --accent:#5b8cff; --ok:#4ade80; --err:#f87171; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.5rem; margin:0 0 4px; } h2 { font-size:1.05rem; margin:0 0 12px; }
+  p.sub { color:var(--muted); margin:0 0 24px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:.85rem; color:var(--muted); margin:8px 0 4px; }
+  input[type=text], input[type=password] { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  button, .btn { display:inline-block; padding:9px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; text-decoration:none; }
+  button.ghost, .btn.ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .drop { border:2px dashed var(--line); border-radius:10px; padding:28px 12px; text-align:center; color:var(--muted); cursor:pointer; }
+  .drop.over { border-color:var(--accent); color:var(--accent); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .msg { margin-top:10px; font-size:.9rem; } .msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
+  .qr { background:#fff; padding:12px; border-radius:8px; display:inline-block; }
+  .result { text-align:center; margin-top:14px; }
+  .url { word-break:break-all; font-size:.85rem; color:var(--muted); }
+  ul.files { list-style:none; margin:0; padding:0; }
+  ul.files li { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); }
+  ul.files li:first-child { border-top:0; }
+  ul.files a { color:var(--fg); word-break:break-all; }
+  details summary { cursor:pointer; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>QR Archivos</h1>
+  <p class="sub">Subí un archivo y obtené un QR permanente para compartirlo.</p>
+
+  <section>
+    <details id="cfg">
+      <summary>Configuración (token de GitHub para subir)</summary>
+      <label for="owner">Usuario / organización</label>
+      <input type="text" id="owner" autocomplete="off">
+      <label for="repo">Repositorio</label>
+      <input type="text" id="repo" autocomplete="off">
+      <label for="token">Token (fine-grained, permiso "Contents: Read and write" sólo en este repo)</label>
+      <input type="password" id="token" autocomplete="off">
+      <div class="row">
+        <button id="save">Guardar</button>
+        <button class="ghost" id="forget">Olvidar token</button>
+      </div>
+      <p class="msg" id="cfgMsg">El token se guarda sólo en este navegador.</p>
+    </details>
+  </section>
+
+  <section>
+    <h2>Subir archivo</h2>
+    <div class="drop" id="drop">Arrastrá un archivo acá o tocá para elegir (máx. 50 MB)</div>
+    <input type="file" id="file" hidden>
+    <p class="msg" id="upMsg"></p>
+    <div class="result" id="result" hidden>
+      <div class="qr" id="qr"></div>
+      <p class="url" id="url"></p>
+      <div class="row" style="justify-content:center">
+        <button id="dl">Descargar QR</button>
+        <button class="ghost" id="copy">Copiar link</button>
+      </div>
+      <p class="msg" id="note">GitHub Pages tarda ~1 minuto en publicar el archivo nuevo. El QR ya es definitivo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Archivos subidos</h2>
+    <ul class="files" id="list"><li>Cargando…</li></ul>
+  </section>
+</main>
+<script src="vendor/qrcode.min.js"></script>
+<script src="lib.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -95,6 +95,15 @@
     a.click();
   }
 
+  function whatsappLink(f, extraClass) {
+    const a = document.createElement("a");
+    a.className = `btn wa ${extraClass || ""}`.trim();
+    a.href = L.whatsappShareUrl(f.label.replace(/\.[^.]+$/, ""), f.url);
+    a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "WhatsApp";
+    return a;
+  }
+
   async function copy(text, noteEl) {
     try { await navigator.clipboard.writeText(text); setMsg(noteEl, "Link copiado.", "ok"); }
     catch { setMsg(noteEl, text); }
@@ -276,9 +285,10 @@
       else { open.href = f.url; open.target = "_blank"; open.rel = "noopener"; }
       const png = document.createElement("button");
       png.className = "sm"; png.textContent = "QR PNG"; png.onclick = () => downloadQR(f.url, f.label);
+      const wa = whatsappLink(f, "sm");
       const del = document.createElement("button");
       del.className = "danger sm"; del.textContent = "Eliminar"; del.onclick = () => removeFile(f);
-      actions.append(open, png, del);
+      actions.append(open, wa, png, del);
       card.append(qr, name, meta, actions);
       grid.appendChild(card);
     }
@@ -342,6 +352,7 @@
     const a = document.createElement("a");
     a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = f.url;
     $("mUrl").appendChild(a);
+    $("mWa").replaceWith(Object.assign(whatsappLink(f), { id: "mWa" }));
     setMsg($("mNote"), note || "");
     $("modal").hidden = false;
   }

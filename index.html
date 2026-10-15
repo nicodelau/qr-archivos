@@ -18,6 +18,7 @@
   button, .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; text-decoration:none; }
   .ghost { background:transparent; color:var(--accent); border:1px solid var(--line); }
   .danger { background:transparent; color:var(--err); border:1px solid var(--line); }
+  .wa { background:#1da851; color:#fff; }
   .sm { padding:5px 10px; font-size:.85rem; }
   button:disabled { opacity:.5; cursor:default; }
   .msg { margin:10px 0 0; font-size:.9rem; min-height:1.2em; } .msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
@@ -128,6 +129,7 @@
     <div class="qr" id="mQr"></div>
     <p class="url" id="mUrl"></p>
     <div class="row" style="justify-content:center">
+      <a class="btn wa" id="mWa">WhatsApp</a>
       <button id="mDl">Descargar QR</button>
       <button class="ghost" id="mCopy">Copiar link</button>
       <button class="ghost" id="mClose">Cerrar</button>

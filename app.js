@@ -138,9 +138,28 @@
       });
       return;
     }
+    if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+      // La pestaña de WhatsApp se abre después de copiar: con el foco en otra pestaña el portapapeles falla.
+      navigator.clipboard.write([new ClipboardItem({ "image/png": file })])
+        .then(() => {
+          openWhatsApp();
+          if (noteEl) setMsg(noteEl, "QR copiado. En WhatsApp abrí el chat y pegalo con Ctrl+V: se adjunta como imagen.", "ok");
+        })
+        .catch(() => downloadFallback(f, noteEl));
+      return;
+    }
+    downloadFallback(f, noteEl);
+  }
+
+  function openWhatsApp() {
+    const w = window.open(WHATSAPP_URL, "whatsapp");
+    if (w) w.opener = null;
+  }
+
+  function downloadFallback(f, noteEl) {
     downloadQR(f);
-    window.open(WHATSAPP_URL, "_blank", "noopener");
-    if (noteEl) setMsg(noteEl, "Se descargó el PNG del QR: adjuntalo en el chat de WhatsApp que se abrió.", "ok");
+    openWhatsApp();
+    if (noteEl) setMsg(noteEl, "Este navegador no permite compartir ni copiar imágenes: se descargó el PNG para adjuntarlo en WhatsApp.", "ok");
   }
 
   async function copy(text, noteEl) {

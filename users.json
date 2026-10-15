@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "users": {
+    "nicodelau": {
+      "salt": "iKcT56doET9K/cj0oOcDtA==",
+      "iv": "p/mVwWP6fBZUMZRV",
+      "ct": "cyow8MrlNPujAgYLNxVPxrhPuti4acwuYuVhkgp3WAVCKlNM5hLcIHOGFuU/0lateY0KIhy/8qE/2IB94FLbQl4fsJhtzdN4guwQo6Qp9xost4DCpjarS1xw+Pv4sLqsYKrfTbH615ksvN4ohw==",
+      "iter": 600000
+    },
+    "diego.cosin": {
+      "salt": "/ic0DxGDb4hZCVuO2q/sZA==",
+      "iv": "YsOoI1yegzRUoAKC",
+      "ct": "MWFd2xTNwNwk2uHF+ZxqDDhOXdwZK2gVCSCIx8MuHX8Uz7xr04oICsiN1UhmdU+JdTpqXr5RT4+o2Z5clsE+nA78siTf+jiqzEsUINj6JKoqTy8Bls2BOb5qf8abr58FaDYBnztOZIAAaqn0eQ==",
+      "iter": 600000
+    }
+  }
+}

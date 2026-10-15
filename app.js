@@ -86,22 +86,61 @@
     new QRCode(container, { text: url, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
   }
 
-  function downloadQR(url, name) {
+  const QR_SIZE = 1024, QR_MARGIN = 80, QR_CAPTION = 140;
+
+  // QR con margen blanco (mejora el escaneo) y el nombre del archivo debajo.
+  function qrPngDataUrl(url, caption) {
     const tmp = document.createElement("div");
-    renderQR(tmp, url, 1024);
+    renderQR(tmp, url, QR_SIZE);
+    const out = document.createElement("canvas");
+    out.width = QR_SIZE + QR_MARGIN * 2;
+    out.height = QR_SIZE + QR_MARGIN * 2 + (caption ? QR_CAPTION : 0);
+    const ctx = out.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(tmp.querySelector("canvas"), QR_MARGIN, QR_MARGIN);
+    if (caption) {
+      ctx.fillStyle = "#1d2330";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      let size = 56;
+      do { ctx.font = `600 ${size}px system-ui, sans-serif`; size -= 4; }
+      while (ctx.measureText(caption).width > out.width - QR_MARGIN * 2 && size > 24);
+      ctx.fillText(caption, out.width / 2, QR_SIZE + QR_MARGIN * 1.5 + QR_CAPTION / 2, out.width - QR_MARGIN * 2);
+    }
+    return out.toDataURL("image/png");
+  }
+
+  const qrFileName = (f) => `qr-${L.baseName(f.label)}.png`;
+  const captionFor = (f) => L.baseName(f.label).replace(/-+/g, " ");
+
+  function downloadQR(f) {
     const a = document.createElement("a");
-    a.href = tmp.querySelector("canvas").toDataURL("image/png");
-    a.download = `qr-${name}.png`;
+    a.href = qrPngDataUrl(f.url, captionFor(f));
+    a.download = qrFileName(f);
     a.click();
   }
 
-  function whatsappLink(f, extraClass) {
-    const a = document.createElement("a");
-    a.className = `btn wa ${extraClass || ""}`.trim();
-    a.href = L.whatsappShareUrl(f.label.replace(/\.[^.]+$/, ""), f.url);
-    a.target = "_blank"; a.rel = "noopener";
-    a.textContent = "WhatsApp";
-    return a;
+  function dataUrlToFile(dataUrl, name) {
+    const bin = atob(dataUrl.split(",")[1]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], name, { type: "image/png" });
+  }
+
+  // Sin awaits antes de navigator.share: Safari exige que se llame dentro del gesto del usuario.
+  function shareQR(f, noteEl) {
+    const file = dataUrlToFile(qrPngDataUrl(f.url, captionFor(f)), qrFileName(f));
+    const text = `${captionFor(f)}\n${f.url}`;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], text }).catch((err) => {
+        if (err.name !== "AbortError" && noteEl) setMsg(noteEl, `No se pudo compartir: ${err.message}`, "err");
+      });
+      return;
+    }
+    downloadQR(f);
+    window.open(L.whatsappShareUrl(captionFor(f), f.url), "_blank", "noopener");
+    if (noteEl) setMsg(noteEl, "Se descargó el PNG del QR: adjuntalo en el chat de WhatsApp que se abrió.", "ok");
   }
 
   async function copy(text, noteEl) {
@@ -284,8 +323,9 @@
       if (f.pending || f.failed) open.style.opacity = ".5";
       else { open.href = f.url; open.target = "_blank"; open.rel = "noopener"; }
       const png = document.createElement("button");
-      png.className = "sm"; png.textContent = "QR PNG"; png.onclick = () => downloadQR(f.url, f.label);
-      const wa = whatsappLink(f, "sm");
+      png.className = "sm"; png.textContent = "QR PNG"; png.onclick = () => downloadQR(f);
+      const wa = document.createElement("button");
+      wa.className = "wa sm"; wa.textContent = "Compartir QR"; wa.onclick = () => shareQR(f, $("upMsg"));
       const del = document.createElement("button");
       del.className = "danger sm"; del.textContent = "Eliminar"; del.onclick = () => removeFile(f);
       actions.append(open, wa, png, del);
@@ -352,13 +392,13 @@
     const a = document.createElement("a");
     a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = f.url;
     $("mUrl").appendChild(a);
-    $("mWa").replaceWith(Object.assign(whatsappLink(f), { id: "mWa" }));
     setMsg($("mNote"), note || "");
     $("modal").hidden = false;
   }
   $("mClose").onclick = () => { $("modal").hidden = true; };
   $("modal").onclick = (e) => { if (e.target === $("modal")) $("modal").hidden = true; };
-  $("mDl").onclick = () => modalFile && downloadQR(modalFile.url, modalFile.label);
+  $("mDl").onclick = () => modalFile && downloadQR(modalFile);
+  $("mWa").onclick = () => modalFile && shareQR(modalFile, $("mNote"));
   $("mCopy").onclick = () => modalFile && copy(modalFile.url, $("mNote"));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").hidden = true; });
 
